@@ -46,6 +46,7 @@ func main() {
 	userCPU, _ := meter.Float64Gauge("node.cpu.user")
 	idleCPU, _ := meter.Float64Gauge("node.cpu.idle")
 	systemCPU, _ := meter.Float64Gauge("node.cpu.system")
+	niceCPU, _ := meter.Float64Gauge("node.cpu.nice")
 
 	processCPU, _ := meter.Float64Gauge("process.cpu.usage")
 	processMemory, _ := meter.Float64Gauge("process.memory.usage")
@@ -92,6 +93,7 @@ func main() {
 				userCPU.Record(ctx, cpu.User)
 				idleCPU.Record(ctx, cpu.Idle)
 				systemCPU.Record(ctx, cpu.System)
+				niceCPU.Record(ctx, cpu.Nice)
 
 				for _, proc := range procs {
 					processMap[proc.Pid] = proc
@@ -132,19 +134,16 @@ func main() {
 				//}
 
 				// top10のみ送信
-				for _, proc := range processList[:10] {
+				for _, proc := range processList {
 					attrs := []attribute.KeyValue{
 						attribute.String("command", proc.Command)}
 
 					processCPU.Record(ctx, proc.Cpu, metric.WithAttributes(attrs...))
 					processMemory.Record(ctx, proc.Memory, metric.WithAttributes(attrs...))
-				}
 
-				// 死んだプロセスを削除
-				for key, proc := range processMap {
-					if proc.Cpu == 0 && proc.Memory == 0 {
-						delete(processMap, key)
-					}
+					fmt.Printf("Command: %s, CPU: %.2f, Memory: %.2f, State: %s\n",
+						proc.Command, proc.Cpu, proc.Memory, proc.State)
+
 				}
 			}
 		}

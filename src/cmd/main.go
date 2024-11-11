@@ -105,6 +105,10 @@ func main() {
 					if proc.State != "R" {
 						continue
 					}
+					// 微小に動くものはスキップ
+					if proc.Cpu <= 1 {
+						continue
+					}
 					// マルチプロセスの場合一つにまとめる
 					if existing, ok := procGroup[proc.Command]; ok {
 						existing.Cpu += proc.Cpu

@@ -145,6 +145,13 @@ func main() {
 						proc.Command, proc.Cpu, proc.Memory, proc.State)
 
 				}
+
+				// 死んだプロセスを削除
+				for key, proc := range processMap {
+					if proc.Cpu == 0 && proc.Memory == 0 {
+						delete(processMap, key)
+					}
+				}
 			}
 		}
 	}()

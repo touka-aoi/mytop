@@ -41,7 +41,7 @@ func main() {
 	defer ticker.Stop()
 
 	t := top.NewTop(&fs)
-	processMap := make(map[int]*top.ProcessTop)
+	procGroup := make(map[string]*top.ProcessTop)
 
 	userCPU, _ := meter.Float64Gauge("node.cpu.user")
 	idleCPU, _ := meter.Float64Gauge("node.cpu.idle")
@@ -57,7 +57,7 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer func() {
-			for _, proc := range processMap {
+			for _, proc := range procGroup {
 				proc.Cpu = 0
 				proc.Memory = 0
 
@@ -75,10 +75,9 @@ func main() {
 				return
 			case <-ticker.C:
 				// リセットする
-				for _, proc := range processMap {
+				for _, proc := range procGroup {
 					proc.Cpu = 0
 					proc.Memory = 0
-					processMap[proc.Pid] = proc
 				}
 
 				// topの値を更新します
@@ -95,18 +94,12 @@ func main() {
 				systemCPU.Record(ctx, cpu.System)
 				niceCPU.Record(ctx, cpu.Nice)
 
-				for _, proc := range procs {
-					processMap[proc.Pid] = proc
-				}
-
 				// 生きているプロセスのみ集計
-				procGroup := make(map[string]*top.ProcessTop)
-				for _, proc := range processMap {
-					if proc.State != "R" {
+				for _, proc := range procs {
+					if proc.State == "Z" || proc.State == "T" {
 						continue
 					}
-					// 微小に動くものはスキップ
-					if proc.Cpu <= 1 {
+					if proc.Cpu < 0.5 {
 						continue
 					}
 					// マルチプロセスの場合一つにまとめる
@@ -131,12 +124,6 @@ func main() {
 					return processList[i].Cpu > processList[j].Cpu
 				})
 
-				// デバッグ用
-				//for _, proc := range processList {
-				//	fmt.Printf("Command: %s, CPU: %.2f, Memory: %.2f, State: %s\n",
-				//		proc.Command, proc.Cpu, proc.Memory, proc.State)
-				//}
-
 				// top10のみ送信
 				for _, proc := range processList {
 					attrs := []attribute.KeyValue{
@@ -145,17 +132,23 @@ func main() {
 					processCPU.Record(ctx, proc.Cpu, metric.WithAttributes(attrs...))
 					processMemory.Record(ctx, proc.Memory, metric.WithAttributes(attrs...))
 
-					fmt.Printf("Command: %s, CPU: %.2f, Memory: %.2f, State: %s\n",
-						proc.Command, proc.Cpu, proc.Memory, proc.State)
+					fmt.Printf("Command: %s, CPU: %.2f, Memory: %.2f\n",
+						proc.Command, proc.Cpu, proc.Memory)
 
 				}
 
 				// 死んだプロセスを削除
-				for key, proc := range processMap {
+				for key, proc := range procGroup {
 					if proc.Cpu == 0 && proc.Memory == 0 {
-						delete(processMap, key)
+
+						attrs := []attribute.KeyValue{
+							attribute.String("command", proc.Command)}
+						processCPU.Record(ctx, proc.Cpu, metric.WithAttributes(attrs...))
+						processMemory.Record(ctx, proc.Memory, metric.WithAttributes(attrs...))
+						delete(procGroup, key)
 					}
 				}
+				fmt.Println("---")
 			}
 		}
 	}()
